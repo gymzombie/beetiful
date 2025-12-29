@@ -1,0 +1,37 @@
+[project]
+name = "beetiful"
+readme = "README.md"
+description = "A Beetiful web interface powered by Beets"
+version = "0.1.0"
+dependencies = [
+    "beautifulsoup4==4.12.3",
+    "blinker==1.8.2",
+    "bs4==0.0.2",
+    "certifi==2024.8.30",
+    "charset-normalizer==3.3.2",
+    "click==8.1.7",
+    "flask==3.0.3",
+    "idna==3.9",
+    "importlib-metadata==8.5.0",
+    "itsdangerous==2.2.0",
+    "jinja2==3.1.4",
+    "MarkupSafe==2.1.5",
+    "python-dotenv==1.0.1",
+    "PyYAML==6.0.2",
+    "requests==2.32.3",
+    "soupsieve==2.6",
+    "urllib3==2.2.3",
+    "werkzeug==3.0.4",
+    "zipp==3.20.2",
+    "waitress==3.0.2",
+]
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[project.urls]
+"Homepage" = "http://github.com/Vansmak/beetiful"
+"Bug Reports" = "https://github.com/Vansmak/beetiful/issues"
+"Source" = "https://github.com/Vansmak/beetiful"
+
