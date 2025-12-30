@@ -167,7 +167,7 @@ function runCommand() {
     .then(response => response.json())
     .then(data => {
         if (command === 'list') {
-            window.location.href = '/';
+            window.location.href = '/library.html';
         } else {
             document.getElementById('commandResult').textContent = formatCommandOutput(data.output || JSON.stringify(data, null, 2));
         }
@@ -218,6 +218,5 @@ function editConfig() {
         document.getElementById('configResult').textContent = 'Error saving config: ' + error.message;
     });
 }
-
 
 
