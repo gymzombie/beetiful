@@ -46,7 +46,7 @@ To install Beetiful, follow these steps:
     Install the required Python packages:
 
     ```bash
-    pip install -r requirements.txt
+    pip install .
     ```
 4. ## Environment Variables
 
