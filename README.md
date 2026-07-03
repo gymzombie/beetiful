@@ -17,6 +17,33 @@ Beetiful is a simple yet elegant web-based interface for managing your music lib
 - Plugin manager
 - More commands
 - Mobile friendly layout
+
+## Installing with Docker Compose
+
+Clone the repo locally:
+
+`git clone https://github.com/gymzombie/beetiful.git`
+
+Create a docker-compose.yml with the following, customized for your environment:
+```
+services:
+  beetiful:
+    build: .
+    container_name: beetiful
+    ports:
+      - "3003:3000"        # host:container — open http://localhost:3001
+    environment:
+      - BEETSDIR=/config/beets
+    volumes:
+      - ./beetiful/:/config/beets   # holds config.yaml (+ the beets library.db)
+      - ./music:/music     # <-- change to your music library path
+    restart: unless-stopped
+```
+
+Then run it:
+`docker compose up`
+
+
 ## Installation
 
 To install Beetiful, follow these steps:
