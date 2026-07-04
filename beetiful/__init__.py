@@ -1,25 +1,40 @@
 from flask import Flask, jsonify, request, render_template
 import os
 import subprocess
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
+)
+logger = logging.getLogger('beetiful')
 
 app = Flask(__name__)
 
 beets_config_dir = os.getenv('BEETSDIR', os.path.expanduser('~/.config/beets'))
 config_path = os.path.join(beets_config_dir, 'config.yaml')
+logger.info('Beets config directory (BEETSDIR): %s', beets_config_dir)
+logger.info('Expecting beets config file at: %s', config_path)
 
 
 @app.route('/api/config', methods=['GET'])
 def view_config():
     """Fetch the configuration as raw text."""
+    logger.info('Loading beets config from %s', config_path)
     try:
         with open(config_path, 'r') as file:
             config_text = file.read()
+        logger.info('Loaded beets config from %s', config_path)
         return config_text, 200
     except FileNotFoundError:
-        return "Config file not found.", 404
-    except Exception as e:
-        return f"Error loading config: {str(e)}", 500
+        logger.error('Config file not found at %s (BEETSDIR=%s)', config_path, beets_config_dir)
+        return f"Config file not found at {config_path}.", 404
+    except PermissionError:
+        logger.error('Permission denied reading config file at %s', config_path)
+        return f"Permission denied reading config file at {config_path}.", 403
+    except Exception:
+        logger.exception('Error loading config from %s', config_path)
+        return f"Error loading config from {config_path}.", 500
 
 @app.route('/api/config', methods=['POST'])
 def edit_config():
