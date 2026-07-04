@@ -111,3 +111,7 @@ python app.py
 
 This repo was forked from the archived https://github.com/Vansmak/beetiful. All updates and changes since then have been made or reviewed by Claude Code. 
 
+Therefore, if you are not a fan of AI Slop, you may want to pass on this one. 
+
+Also, reviews, comments, and PRs from humans and actual developers are welcomed and appreciated!
+
