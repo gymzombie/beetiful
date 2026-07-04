@@ -96,8 +96,8 @@ function sortByColumn(column) {
 
     
     filteredData.sort((a, b) => {
-        const aValue = Object.values(a)[column]?.toLowerCase() || '';
-        const bValue = Object.values(b)[column]?.toLowerCase() || '';
+        const aValue = a[column]?.toLowerCase() || '';
+        const bValue = b[column]?.toLowerCase() || '';
 
         if (aValue < bValue) return sortOrder.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortOrder.direction === 'asc' ? 1 : -1;
@@ -194,7 +194,7 @@ function updatePaginationControls() {
 document.getElementById('tableHeaders').addEventListener('click', (event) => {
     const column = event.target.dataset.column;
     if (column !== undefined) {
-        sortByColumn(parseInt(column));
+        sortByColumn(column);
     }
 });
 function populateLibrary(items) {
