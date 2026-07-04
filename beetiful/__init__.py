@@ -100,10 +100,22 @@ def home():
     return render_template('index.html')
 
 
+def run_beet(args, **kwargs):
+    """Run a `beet` command, logging the invocation.
+
+    The app shells out to beets for stats, listing, and edits; routing every
+    call through here makes each invocation visible in the logs.
+    """
+    logger.info('Invoking beets: %s', ' '.join(args))
+    kwargs.setdefault('capture_output', True)
+    kwargs.setdefault('text', True)
+    return subprocess.run(args, **kwargs)
+
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Fetch statistics from beets."""
-    result = subprocess.run(['beet', 'stats'], capture_output=True, text=True)
+    result = run_beet(['beet', 'stats'])
     if result.returncode == 0:
         stats = parse_stats(result.stdout)
         return jsonify(stats)
@@ -121,7 +133,7 @@ def run_command():
     full_command = ['beet', command] + options + arguments
 
     try:
-        result = subprocess.run(full_command, capture_output=True, text=True)
+        result = run_beet(full_command)
         if result.returncode == 0:
             return jsonify({'output': result.stdout.splitlines()})
         else:
@@ -132,7 +144,7 @@ def run_command():
 @app.route('/api/library', methods=['GET'])
 def get_library():
     """Fetch the library items including genre information."""
-    result = subprocess.run(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'], capture_output=True, text=True)
+    result = run_beet(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'])
     if result.returncode == 0:
         items = [parse_library_item(line) for line in result.stdout.splitlines()]
         return jsonify({'items': items})
@@ -164,7 +176,7 @@ def remove_track():
 
     
     id_command = ['beet', 'list', '-f', '$id', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    id_result = subprocess.run(id_command, capture_output=True, text=True)
+    id_result = run_beet(id_command)
 
     if id_result.returncode != 0 or not id_result.stdout.strip():
         print(f"Error finding track ID: {id_result.stderr}")
@@ -178,7 +190,7 @@ def remove_track():
     print(f"Executing remove command: {' '.join(remove_command)}")
 
     try:
-        result = subprocess.run(remove_command, capture_output=True, text=True, check=True)
+        result = run_beet(remove_command, check=True)
         print("Track removed from library.")
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
@@ -200,10 +212,10 @@ def delete_track():
 
     
     command = ['beet', 'remove', '-f', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    print(f"Executing delete command: {' '.join(command)}") 
+    print(f"Executing delete command: {' '.join(command)}")
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = run_beet(command, check=True)
         print("Track deleted successfully.")  
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
@@ -233,9 +245,9 @@ def update_track():
     print(f"Executing command: {' '.join(command)}")
 
     
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = run_beet(command)
 
-    
+
     if result.returncode != 0:
         print(f"Error: {result.stderr}")
         return jsonify({'error': result.stderr}), 500
