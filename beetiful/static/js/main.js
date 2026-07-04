@@ -9,7 +9,10 @@ function getStats() {
     fetch('/api/stats')
         .then(response => response.json())
         .then(data => {
-            
+            if (data && data.no_library) {
+                // fetchLibrary() renders the no-library notice; just skip stats.
+                return;
+            }
             document.getElementById('totalTracks').textContent = data.total_tracks !== undefined ? `(${data.total_tracks})` : '';
             document.getElementById('totalArtists').textContent = data.total_artists !== undefined ? `(${data.total_artists})` : '';
             document.getElementById('totalAlbums').textContent = data.total_albums !== undefined ? `(${data.total_albums})` : '';
@@ -195,9 +198,17 @@ function formatCommandOutput(output) {
 
 function viewConfig() {
     fetch('/api/config')
-        .then(response => response.text())  
-        .then(data => {
-            document.getElementById('configTextArea').value = data;  
+        .then(response => response.text().then(text => ({ ok: response.ok, text })))
+        .then(({ ok, text }) => {
+            if (ok) {
+                document.getElementById('configTextArea').value = text;
+                document.getElementById('configResult').textContent = '';
+            } else {
+                // Never load an error response into the editor: saving it back
+                // would overwrite the real config file with the message text.
+                document.getElementById('configTextArea').value = '';
+                document.getElementById('configResult').textContent = text;
+            }
         })
         .catch(error => {
             document.getElementById('configResult').textContent = 'Error loading config: ' + error.message;
@@ -205,7 +216,12 @@ function viewConfig() {
 }
 
 function editConfig() {
-    const yamlText = document.getElementById('configTextArea').value;  
+    const yamlText = document.getElementById('configTextArea').value;
+
+    if (!yamlText.trim()) {
+        document.getElementById('configResult').textContent = 'Nothing to save: the editor is empty.';
+        return;
+    }
 
     fetch('/api/config', {
         method: 'POST',

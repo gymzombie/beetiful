@@ -2,6 +2,9 @@ from flask import Flask, jsonify, request, render_template
 import os
 import subprocess
 import logging
+import functools
+
+import yaml
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,9 +15,98 @@ logger = logging.getLogger('beetiful')
 app = Flask(__name__)
 
 beets_config_dir = os.getenv('BEETSDIR', os.path.expanduser('~/.config/beets'))
-config_path = os.path.join(beets_config_dir, 'config.yaml')
+
+# beets' default config filename is config.yaml, but tolerate config.yml too.
+# The first name is the canonical location used when creating a new file.
+CONFIG_FILENAMES = ('config.yaml', 'config.yml')
+
+
+def resolve_config_path(must_exist=False):
+    """Return the beets config file path.
+
+    Prefers an existing config.yaml, then config.yml. If neither exists and
+    must_exist is False, returns the canonical config.yaml path (where a new
+    file should be created). If must_exist is True and none exist, returns None.
+    """
+    for name in CONFIG_FILENAMES:
+        candidate = os.path.join(beets_config_dir, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return None if must_exist else os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
+
+
+# Where to point users who have no library yet.
+BEETS_DOCS_URL = 'https://beets.readthedocs.io/en/stable/guides/main.html'
+
+
+def resolve_library_path():
+    """Return the beets library database path, mirroring beets' own resolution.
+
+    Uses the `library:` setting from the config if present (expanding `~`/env
+    vars and resolving relative paths against BEETSDIR), otherwise falls back to
+    beets' default of `library.db` inside BEETSDIR. Does not touch beets, so it
+    never creates the database as a side effect.
+    """
+    config_path = resolve_config_path(must_exist=True)
+    library = None
+    if config_path is not None:
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file) or {}
+            if isinstance(config, dict):
+                library = config.get('library')
+        except (OSError, yaml.YAMLError) as e:
+            logger.warning('Could not read library path from %s: %s', config_path, e)
+
+    if not library:
+        return os.path.join(beets_config_dir, 'library.db')
+
+    library = os.path.expanduser(os.path.expandvars(str(library)))
+    if not os.path.isabs(library):
+        library = os.path.join(beets_config_dir, library)
+    return library
+
+
+def library_missing_response():
+    """If no beets library exists, return a Flask response; otherwise None.
+
+    Callers invoke this before shelling out to beets so the app never triggers
+    beets into creating a fresh (empty) library just from a page load.
+    """
+    library_path = resolve_library_path()
+    if os.path.isfile(library_path):
+        return None
+    logger.warning('No beets library found at %s; not invoking beets', library_path)
+    return jsonify({
+        'no_library': True,
+        'library_path': library_path,
+        'message': (
+            f"No music library found at {library_path}. Beetiful will not "
+            f"create one for you. Create a beets library the app can access, "
+            f"then reload."
+        ),
+        'docs_url': BEETS_DOCS_URL,
+    }), 409
+
+
+def requires_library(view):
+    """Block a beets-invoking view when no library exists.
+
+    Enforces the rule that the app never creates a library as a side effect:
+    if the database is missing, respond with the 'no_library' payload instead
+    of shelling out to beets (which would create an empty one).
+    """
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        guard = library_missing_response()
+        if guard is not None:
+            return guard
+        return view(*args, **kwargs)
+    return wrapped
+
+
 logger.info('Beets config directory (BEETSDIR): %s', beets_config_dir)
-logger.info('Expecting beets config file at: %s', config_path)
+logger.info('Looking for beets config (%s) in: %s', ' or '.join(CONFIG_FILENAMES), beets_config_dir)
 
 
 def check_config_file():
@@ -46,15 +138,17 @@ check_config_file()
 @app.route('/api/config', methods=['GET'])
 def view_config():
     """Fetch the configuration as raw text."""
+    config_path = resolve_config_path(must_exist=True)
+    if config_path is None:
+        expected = os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
+        logger.error('Config file not found in %s (BEETSDIR=%s)', beets_config_dir, beets_config_dir)
+        return f"Config file not found at {expected}.", 404
     logger.info('Loading beets config from %s', config_path)
     try:
         with open(config_path, 'r') as file:
             config_text = file.read()
         logger.info('Loaded beets config from %s', config_path)
         return config_text, 200
-    except FileNotFoundError:
-        logger.error('Config file not found at %s (BEETSDIR=%s)', config_path, beets_config_dir)
-        return f"Config file not found at {config_path}.", 404
     except PermissionError:
         logger.error('Permission denied reading config file at %s', config_path)
         return f"Permission denied reading config file at {config_path}.", 403
@@ -64,13 +158,38 @@ def view_config():
 
 @app.route('/api/config', methods=['POST'])
 def edit_config():
-    """Save the configuration as raw text."""
+    """Save the configuration as raw text after validating it is YAML."""
     try:
-        config_text = request.data.decode('utf-8')  
+        config_text = request.data.decode('utf-8')
+    except UnicodeDecodeError:
+        logger.error('Rejected config save: request body is not valid UTF-8')
+        return jsonify({'error': 'Configuration must be valid UTF-8 text.'}), 400
+
+    # Refuse to write content that is not a valid YAML mapping. A beets config
+    # is always a mapping of settings; requiring that stops a stray payload
+    # (e.g. the "Config file not found..." error text echoed back from the
+    # editor, which is a valid YAML *string*) from clobbering the file on disk.
+    try:
+        parsed = yaml.safe_load(config_text)
+    except yaml.YAMLError as e:
+        logger.error('Rejected config save: content is not valid YAML: %s', e)
+        return jsonify({'error': f"Configuration is not valid YAML: {str(e)}"}), 400
+
+    if parsed is not None and not isinstance(parsed, dict):
+        logger.error(
+            'Rejected config save: parsed YAML is %s, expected a mapping',
+            type(parsed).__name__,
+        )
+        return jsonify({'error': 'Configuration must be a YAML mapping (key: value settings).'}), 400
+
+    config_path = resolve_config_path()
+    try:
         with open(config_path, 'w') as file:
-            file.write(config_text)  
+            file.write(config_text)
+        logger.info('Saved beets config to %s', config_path)
         return jsonify({'message': 'Configuration updated successfully'}), 200
     except Exception as e:
+        logger.exception('Failed to save configuration to %s', config_path)
         return jsonify({'error': f"Failed to save configuration: {str(e)}"}), 500
 
 @app.route('/')
@@ -78,10 +197,23 @@ def home():
     return render_template('index.html')
 
 
+def run_beet(args, **kwargs):
+    """Run a `beet` command, logging the invocation.
+
+    The app shells out to beets for stats, listing, and edits; routing every
+    call through here makes each invocation visible in the logs.
+    """
+    logger.info('Invoking beets: %s', ' '.join(args))
+    kwargs.setdefault('capture_output', True)
+    kwargs.setdefault('text', True)
+    return subprocess.run(args, **kwargs)
+
+
 @app.route('/api/stats', methods=['GET'])
+@requires_library
 def get_stats():
     """Fetch statistics from beets."""
-    result = subprocess.run(['beet', 'stats'], capture_output=True, text=True)
+    result = run_beet(['beet', 'stats'])
     if result.returncode == 0:
         stats = parse_stats(result.stdout)
         return jsonify(stats)
@@ -90,6 +222,7 @@ def get_stats():
 
 
 @app.route('/api/run-command', methods=['POST'])
+@requires_library
 def run_command():
     """Run a command using beets."""
     command = request.json.get('command')
@@ -99,7 +232,7 @@ def run_command():
     full_command = ['beet', command] + options + arguments
 
     try:
-        result = subprocess.run(full_command, capture_output=True, text=True)
+        result = run_beet(full_command)
         if result.returncode == 0:
             return jsonify({'output': result.stdout.splitlines()})
         else:
@@ -108,9 +241,10 @@ def run_command():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/library', methods=['GET'])
+@requires_library
 def get_library():
     """Fetch the library items including genre information."""
-    result = subprocess.run(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'], capture_output=True, text=True)
+    result = run_beet(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'])
     if result.returncode == 0:
         items = [parse_library_item(line) for line in result.stdout.splitlines()]
         return jsonify({'items': items})
@@ -134,6 +268,7 @@ def parse_library_item(line):
 
         
 @app.route('/api/library/remove', methods=['POST'])
+@requires_library
 def remove_track():
     data = request.json
     title = data.get('title')
@@ -142,7 +277,7 @@ def remove_track():
 
     
     id_command = ['beet', 'list', '-f', '$id', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    id_result = subprocess.run(id_command, capture_output=True, text=True)
+    id_result = run_beet(id_command)
 
     if id_result.returncode != 0 or not id_result.stdout.strip():
         print(f"Error finding track ID: {id_result.stderr}")
@@ -156,7 +291,7 @@ def remove_track():
     print(f"Executing remove command: {' '.join(remove_command)}")
 
     try:
-        result = subprocess.run(remove_command, capture_output=True, text=True, check=True)
+        result = run_beet(remove_command, check=True)
         print("Track removed from library.")
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
@@ -165,6 +300,7 @@ def remove_track():
 
 
 @app.route('/api/library/delete', methods=['POST'])
+@requires_library
 def delete_track():
     data = request.json
     print(f"Delete request received with data: {data}")  
@@ -178,10 +314,10 @@ def delete_track():
 
     
     command = ['beet', 'remove', '-f', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    print(f"Executing delete command: {' '.join(command)}") 
+    print(f"Executing delete command: {' '.join(command)}")
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = run_beet(command, check=True)
         print("Track deleted successfully.")  
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
@@ -192,6 +328,7 @@ def delete_track():
 
 
 @app.route('/api/library/update', methods=['POST'])
+@requires_library
 def update_track():
     data = request.json
     original_title = data.get('originalTitle', '')
@@ -211,9 +348,9 @@ def update_track():
     print(f"Executing command: {' '.join(command)}")
 
     
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = run_beet(command)
 
-    
+
     if result.returncode != 0:
         print(f"Error: {result.stderr}")
         return jsonify({'error': result.stderr}), 500

@@ -12,10 +12,15 @@ function fetchLibrary() {
     fetch('/api/library')
         .then(response => response.json())
         .then(data => {
+            if (data && data.no_library) {
+                showNoLibraryNotice(data);
+                return;
+            }
             if (Array.isArray(data.items)) {
-                libraryData = data.items; 
-                filteredData = libraryData; 
-                showPage(currentPage);    
+                hideNoLibraryNotice();
+                libraryData = data.items;
+                filteredData = libraryData;
+                showPage(currentPage);
             } else {
                 console.error('Unexpected data format:', data);
                 document.getElementById('libraryResults').innerHTML = '<tr><td colspan="5">No library data found.</td></tr>';
@@ -25,6 +30,55 @@ function fetchLibrary() {
             console.error('Error fetching library data:', error);
             document.getElementById('libraryResults').innerHTML = '<tr><td colspan="5">Error loading library data.</td></tr>';
         });
+}
+
+// When no beets library exists, show a focused notice and hide the table,
+// filters and pagination so the user's only next action is clear.
+function showNoLibraryNotice(info) {
+    const tableContainer = document.querySelector('.table-container');
+    if (tableContainer) tableContainer.style.display = 'none';
+    const pagination = document.getElementById('paginationControls');
+    if (pagination) pagination.style.display = 'none';
+    ['totalTracks', 'totalArtists', 'totalAlbums'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+
+    const docsUrl = (info && info.docs_url) || 'https://beets.readthedocs.io/en/stable/guides/main.html';
+    const message = (info && info.message) || 'No music library found.';
+
+    const notice = document.getElementById('libraryNotice');
+    notice.innerHTML = '';
+
+    const heading = document.createElement('h5');
+    heading.className = 'alert-heading';
+    heading.textContent = 'No music library found';
+
+    const messagePara = document.createElement('p');
+    messagePara.textContent = message;  // textContent avoids injecting the path
+
+    const helpPara = document.createElement('p');
+    helpPara.className = 'mb-0';
+    helpPara.appendChild(document.createTextNode('New to beets? See the '));
+    const link = document.createElement('a');
+    link.href = docsUrl;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'beets Getting Started guide';
+    helpPara.appendChild(link);
+    helpPara.appendChild(document.createTextNode(' to create your library.'));
+
+    notice.append(heading, messagePara, helpPara);
+    notice.style.display = 'block';
+}
+
+function hideNoLibraryNotice() {
+    const notice = document.getElementById('libraryNotice');
+    if (notice) notice.style.display = 'none';
+    const tableContainer = document.querySelector('.table-container');
+    if (tableContainer) tableContainer.style.display = '';
+    const pagination = document.getElementById('paginationControls');
+    if (pagination) pagination.style.display = '';
 }
 
 
