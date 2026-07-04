@@ -117,22 +117,6 @@ function sortByColumn(column) {
 
 
 
-function clearFilters() {
-    document.getElementById('filterTitle').value = '';
-    document.getElementById('filterArtist').value = '';
-    document.getElementById('filterAlbum').value = '';
-    document.getElementById('filterGenre').value = '';
-
-    
-    filteredData = libraryData;
-    currentPage = 1;
-
-    
-    document.querySelectorAll('th').forEach(th => th.classList.remove('asc', 'desc'));
-    sortOrder = { column: null, direction: 'asc' };
-
-    showPage(currentPage);
-}
 
 
 
