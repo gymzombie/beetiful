@@ -1,0 +1,20 @@
+# Beets configuration for Beetiful (running in Docker).
+#
+# The paths below are CONTAINER paths and must match the volume mounts in
+# docker-compose.yml:
+#   ./beets-config  -> /config/beets   (this file + the library database)
+#   your music dir  -> /music
+#
+# See https://beets.readthedocs.io/en/stable/reference/config.html
+
+directory: /music
+library: /config/beets/library.db
+
+# Where beets looks for imported files, etc. Adjust to taste.
+import:
+  move: no          # set to yes to move files into `directory` on import
+  copy: no          # set to yes to copy them instead
+  write: yes        # write tags back to media files
+
+# Add plugins here as you need them, e.g.:
+# plugins: fetchart lyrics lastgenre

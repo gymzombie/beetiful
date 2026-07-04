@@ -1,0 +1,15 @@
+services:
+  beetiful:
+    build: .
+    # To use the prebuilt image instead of building locally, comment out the
+    # line above and uncomment the line below:
+    # image: ghcr.io/vansmak/beetiful:master
+    container_name: beetiful
+    ports:
+      - "3001:3000"        # host:container — open http://localhost:3001
+    environment:
+      - BEETSDIR=/config/beets
+    volumes:
+      - ./beets-config:/config/beets   # holds config.yaml (+ the beets library.db)
+      - /path/to/your/music:/music     # <-- change to your music library path
+    restart: unless-stopped
