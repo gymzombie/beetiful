@@ -167,7 +167,9 @@ function runCommand() {
     .then(response => response.json())
     .then(data => {
         if (command === 'list') {
-            window.location.href = '/library.html';
+            // The library table lives on the current page ('/'); refresh it
+            // in place rather than redirecting to a nonexistent route.
+            fetchLibrary();
         } else {
             document.getElementById('commandResult').textContent = formatCommandOutput(data.output || JSON.stringify(data, null, 2));
         }

@@ -1,9 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
     fetchLibrary();
-    debugLibrary();
-    
-    
-    
 });
 
 let currentPage = 1;
@@ -351,16 +347,6 @@ function closeEditForm() {
 }
 
 
-
-function debugLibrary() {
-    fetch('/api/debug_library')
-        .then(response => response.json())
-        .then(data => {
-            console.log('Raw items:', data.raw_items);
-            console.log('Parsed items:', data.parsed_items);
-        })
-        .catch(error => console.error('Error fetching debug data:', error));
-}
 
 
 
