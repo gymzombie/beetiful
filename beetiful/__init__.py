@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template
 import os
 import subprocess
 import logging
+import functools
 
 import yaml
 
@@ -32,6 +33,76 @@ def resolve_config_path(must_exist=False):
         if os.path.isfile(candidate):
             return candidate
     return None if must_exist else os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
+
+
+# Where to point users who have no library yet.
+BEETS_DOCS_URL = 'https://beets.readthedocs.io/en/stable/guides/main.html'
+
+
+def resolve_library_path():
+    """Return the beets library database path, mirroring beets' own resolution.
+
+    Uses the `library:` setting from the config if present (expanding `~`/env
+    vars and resolving relative paths against BEETSDIR), otherwise falls back to
+    beets' default of `library.db` inside BEETSDIR. Does not touch beets, so it
+    never creates the database as a side effect.
+    """
+    config_path = resolve_config_path(must_exist=True)
+    library = None
+    if config_path is not None:
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file) or {}
+            if isinstance(config, dict):
+                library = config.get('library')
+        except (OSError, yaml.YAMLError) as e:
+            logger.warning('Could not read library path from %s: %s', config_path, e)
+
+    if not library:
+        return os.path.join(beets_config_dir, 'library.db')
+
+    library = os.path.expanduser(os.path.expandvars(str(library)))
+    if not os.path.isabs(library):
+        library = os.path.join(beets_config_dir, library)
+    return library
+
+
+def library_missing_response():
+    """If no beets library exists, return a Flask response; otherwise None.
+
+    Callers invoke this before shelling out to beets so the app never triggers
+    beets into creating a fresh (empty) library just from a page load.
+    """
+    library_path = resolve_library_path()
+    if os.path.isfile(library_path):
+        return None
+    logger.warning('No beets library found at %s; not invoking beets', library_path)
+    return jsonify({
+        'no_library': True,
+        'library_path': library_path,
+        'message': (
+            f"No music library found at {library_path}. Beetiful will not "
+            f"create one for you. Create a beets library the app can access, "
+            f"then reload."
+        ),
+        'docs_url': BEETS_DOCS_URL,
+    }), 409
+
+
+def requires_library(view):
+    """Block a beets-invoking view when no library exists.
+
+    Enforces the rule that the app never creates a library as a side effect:
+    if the database is missing, respond with the 'no_library' payload instead
+    of shelling out to beets (which would create an empty one).
+    """
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        guard = library_missing_response()
+        if guard is not None:
+            return guard
+        return view(*args, **kwargs)
+    return wrapped
 
 
 logger.info('Beets config directory (BEETSDIR): %s', beets_config_dir)
@@ -113,6 +184,7 @@ def run_beet(args, **kwargs):
 
 
 @app.route('/api/stats', methods=['GET'])
+@requires_library
 def get_stats():
     """Fetch statistics from beets."""
     result = run_beet(['beet', 'stats'])
@@ -124,6 +196,7 @@ def get_stats():
 
 
 @app.route('/api/run-command', methods=['POST'])
+@requires_library
 def run_command():
     """Run a command using beets."""
     command = request.json.get('command')
@@ -142,6 +215,7 @@ def run_command():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/library', methods=['GET'])
+@requires_library
 def get_library():
     """Fetch the library items including genre information."""
     result = run_beet(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'])
@@ -168,6 +242,7 @@ def parse_library_item(line):
 
         
 @app.route('/api/library/remove', methods=['POST'])
+@requires_library
 def remove_track():
     data = request.json
     title = data.get('title')
@@ -199,6 +274,7 @@ def remove_track():
 
 
 @app.route('/api/library/delete', methods=['POST'])
+@requires_library
 def delete_track():
     data = request.json
     print(f"Delete request received with data: {data}")  
@@ -226,6 +302,7 @@ def delete_track():
 
 
 @app.route('/api/library/update', methods=['POST'])
+@requires_library
 def update_track():
     data = request.json
     original_title = data.get('originalTitle', '')

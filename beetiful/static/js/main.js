@@ -9,7 +9,10 @@ function getStats() {
     fetch('/api/stats')
         .then(response => response.json())
         .then(data => {
-            
+            if (data && data.no_library) {
+                // fetchLibrary() renders the no-library notice; just skip stats.
+                return;
+            }
             document.getElementById('totalTracks').textContent = data.total_tracks !== undefined ? `(${data.total_tracks})` : '';
             document.getElementById('totalArtists').textContent = data.total_artists !== undefined ? `(${data.total_artists})` : '';
             document.getElementById('totalAlbums').textContent = data.total_albums !== undefined ? `(${data.total_albums})` : '';
