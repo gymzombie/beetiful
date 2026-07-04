@@ -3,6 +3,8 @@ import os
 import subprocess
 import logging
 
+import yaml
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
@@ -12,23 +14,44 @@ logger = logging.getLogger('beetiful')
 app = Flask(__name__)
 
 beets_config_dir = os.getenv('BEETSDIR', os.path.expanduser('~/.config/beets'))
-config_path = os.path.join(beets_config_dir, 'config.yaml')
+
+# beets' default config filename is config.yaml, but tolerate config.yml too.
+# The first name is the canonical location used when creating a new file.
+CONFIG_FILENAMES = ('config.yaml', 'config.yml')
+
+
+def resolve_config_path(must_exist=False):
+    """Return the beets config file path.
+
+    Prefers an existing config.yaml, then config.yml. If neither exists and
+    must_exist is False, returns the canonical config.yaml path (where a new
+    file should be created). If must_exist is True and none exist, returns None.
+    """
+    for name in CONFIG_FILENAMES:
+        candidate = os.path.join(beets_config_dir, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return None if must_exist else os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
+
+
 logger.info('Beets config directory (BEETSDIR): %s', beets_config_dir)
-logger.info('Expecting beets config file at: %s', config_path)
+logger.info('Looking for beets config (%s) in: %s', ' or '.join(CONFIG_FILENAMES), beets_config_dir)
 
 
 @app.route('/api/config', methods=['GET'])
 def view_config():
     """Fetch the configuration as raw text."""
+    config_path = resolve_config_path(must_exist=True)
+    if config_path is None:
+        expected = os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
+        logger.error('Config file not found in %s (BEETSDIR=%s)', beets_config_dir, beets_config_dir)
+        return f"Config file not found at {expected}.", 404
     logger.info('Loading beets config from %s', config_path)
     try:
         with open(config_path, 'r') as file:
             config_text = file.read()
         logger.info('Loaded beets config from %s', config_path)
         return config_text, 200
-    except FileNotFoundError:
-        logger.error('Config file not found at %s (BEETSDIR=%s)', config_path, beets_config_dir)
-        return f"Config file not found at {config_path}.", 404
     except PermissionError:
         logger.error('Permission denied reading config file at %s', config_path)
         return f"Permission denied reading config file at {config_path}.", 403
@@ -38,13 +61,38 @@ def view_config():
 
 @app.route('/api/config', methods=['POST'])
 def edit_config():
-    """Save the configuration as raw text."""
+    """Save the configuration as raw text after validating it is YAML."""
     try:
-        config_text = request.data.decode('utf-8')  
+        config_text = request.data.decode('utf-8')
+    except UnicodeDecodeError:
+        logger.error('Rejected config save: request body is not valid UTF-8')
+        return jsonify({'error': 'Configuration must be valid UTF-8 text.'}), 400
+
+    # Refuse to write content that is not a valid YAML mapping. A beets config
+    # is always a mapping of settings; requiring that stops a stray payload
+    # (e.g. the "Config file not found..." error text echoed back from the
+    # editor, which is a valid YAML *string*) from clobbering the file on disk.
+    try:
+        parsed = yaml.safe_load(config_text)
+    except yaml.YAMLError as e:
+        logger.error('Rejected config save: content is not valid YAML: %s', e)
+        return jsonify({'error': f"Configuration is not valid YAML: {str(e)}"}), 400
+
+    if parsed is not None and not isinstance(parsed, dict):
+        logger.error(
+            'Rejected config save: parsed YAML is %s, expected a mapping',
+            type(parsed).__name__,
+        )
+        return jsonify({'error': 'Configuration must be a YAML mapping (key: value settings).'}), 400
+
+    config_path = resolve_config_path()
+    try:
         with open(config_path, 'w') as file:
-            file.write(config_text)  
+            file.write(config_text)
+        logger.info('Saved beets config to %s', config_path)
         return jsonify({'message': 'Configuration updated successfully'}), 200
     except Exception as e:
+        logger.exception('Failed to save configuration to %s', config_path)
         return jsonify({'error': f"Failed to save configuration: {str(e)}"}), 500
 
 @app.route('/')
