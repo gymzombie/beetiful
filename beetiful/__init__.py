@@ -17,6 +17,32 @@ logger.info('Beets config directory (BEETSDIR): %s', beets_config_dir)
 logger.info('Expecting beets config file at: %s', config_path)
 
 
+def check_config_file():
+    """Report the beets config file's status at startup.
+
+    Non-fatal: the file may be created later (e.g. via the config editor or a
+    mounted volume that appears after boot), so a missing file is a warning,
+    not an exit. This surfaces the problem in the logs immediately rather than
+    only when the webapp first requests /api/config.
+    """
+    if not os.path.isfile(config_path):
+        logger.warning(
+            'Beets config file not found at %s (BEETSDIR=%s); config editing '
+            'and beets commands may fail until it exists',
+            config_path, beets_config_dir,
+        )
+    elif not os.access(config_path, os.R_OK):
+        logger.warning(
+            'Beets config file at %s exists but is not readable (check permissions)',
+            config_path,
+        )
+    else:
+        logger.info('Beets config file found at %s', config_path)
+
+
+check_config_file()
+
+
 @app.route('/api/config', methods=['GET'])
 def view_config():
     """Fetch the configuration as raw text."""
