@@ -11,3 +11,7 @@ LIBRARY_PATH=/path/to/yor/music
 
 # Add any other environment-specific settings here
 FLASK_PORT=
+
+# Enable Flask's debugger/reloader (development only). Leave unset/false in
+# production: the debugger exposes an interactive console (RCE) on errors.
+FLASK_DEBUG=false

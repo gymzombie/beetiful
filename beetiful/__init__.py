@@ -12,6 +12,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger('beetiful')
 
+
+def env_flag(name, default=False):
+    """Parse a boolean environment variable.
+
+    Returns True only for explicit truthy values ('1', 'true', 'yes', 'on');
+    anything else — including an unset variable — returns `default`.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 app = Flask(__name__)
 
 beets_config_dir = os.getenv('BEETSDIR', os.path.expanduser('~/.config/beets'))
@@ -379,5 +392,7 @@ def parse_stats(output):
 port = int(os.getenv("FLASK_PORT", 3000))
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=port)
+    # Debug is OFF unless FLASK_DEBUG is explicitly enabled: the Werkzeug
+    # debugger exposes an interactive console (RCE) on any unhandled exception.
+    app.run(debug=env_flag('FLASK_DEBUG'), host='0.0.0.0', port=port)
 
