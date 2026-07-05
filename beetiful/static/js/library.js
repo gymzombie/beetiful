@@ -68,8 +68,13 @@ function initLibraryTable() {
         paginationCounter: 'rows',
         index: 'id',
         placeholder: 'No matching tracks',
-        // Persist which columns the user has shown/hidden to localStorage, so a
-        // customized view (issue #20) survives reloads. Keyed by column field.
+        // Drag column headers to reorder them (issue #32).
+        movableColumns: true,
+        // Persist the user's column layout to localStorage so a customized view
+        // survives reloads: `visible` records show/hide choices (issue #20), and
+        // because Tabulator stores the columns as an ordered list, the drag order
+        // (issue #32) is restored too. Width is intentionally omitted so it does
+        // not fight the fitColumns layout. Keyed by column field.
         persistence: { columns: ['visible'] },
         persistenceID: 'beetiful-library',
         // Every fetched field is available as a column; the ones off by default
