@@ -191,3 +191,36 @@ input[type="text"]:not(:placeholder-shown) {
     color: #777777;
 }
 
+/* Collapsible Config Editor header (issue #25): render the collapse toggle as
+   a plain heading rather than a boxed button, with a chevron that rotates when
+   the section is open. */
+.config-toggle {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.config-toggle:hover,
+.config-toggle:focus {
+    background: none;
+    color: #ffffff;
+    outline: none;
+}
+
+.config-chevron {
+    display: inline-block;
+    font-size: 0.9rem;
+    transition: transform 0.15s ease;
+}
+
+.config-toggle[aria-expanded="true"] .config-chevron {
+    transform: rotate(90deg);
+}
