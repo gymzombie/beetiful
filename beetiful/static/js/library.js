@@ -253,45 +253,86 @@ document.getElementById('tableHeaders').addEventListener('click', (event) => {
 });
 function populateLibrary(items) {
     const libraryResults = document.getElementById('libraryResults');
-    libraryResults.innerHTML = '';  
+    libraryResults.innerHTML = '';
 
     items.forEach(item => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${item.title || ''}</td>  <!-- Title -->
-            <td>${item.artist || ''}</td>  <!-- Artist -->
-            <td>${item.album || ''}</td>  <!-- Album -->
-            <td>${item.genre || ''}</td>  <!-- Genre -->
-            <td>
-                <button class="btn btn-primary btn-sm" 
-                    onclick='editTrack(${JSON.stringify(item)})'>
-                    Edit
-                </button>
-            </td>
-        `;
+
+        // Use textContent so track metadata is never parsed as HTML (stored XSS).
+        ['title', 'artist', 'album', 'genre'].forEach(field => {
+            const cell = document.createElement('td');
+            cell.textContent = item[field] || '';
+            row.appendChild(cell);
+        });
+
+        const actionCell = document.createElement('td');
+        const editButton = document.createElement('button');
+        editButton.className = 'btn btn-primary btn-sm';
+        editButton.textContent = 'Edit';
+        // Pass the item via a closure instead of serializing it into markup.
+        editButton.addEventListener('click', () => editTrack(item));
+        actionCell.appendChild(editButton);
+        row.appendChild(actionCell);
+
         libraryResults.appendChild(row);
     });
 }
 
 function editTrack(track) {
-    const formHtml = `
-        <h5>Edit Track</h5>
-        <label>Title: <input type="text" id="editTitle" class="form-control" value="${track.title}"></label>
-        <label>Artist: <input type="text" id="editArtist" class="form-control" value="${track.artist}"></label>
-        <label>Album: <input type="text" id="editAlbum" class="form-control" value="${track.album}"></label>
-        <label>Year: <input type="text" id="editYear" class="form-control" value="${track.year}"></label>
-        <label>Genre: <input type="text" id="editGenre" class="form-control" value="${track.genre}"></label>
-        <label>Composer: <input type="text" id="editComposer" class="form-control" value="${track.composer}"></label>
-        <label>BPM: <input type="text" id="editBpm" class="form-control" value="${track.bpm}"></label>
-        <label>Comments: <textarea id="editComments" class="form-control"> ${track.comments}</textarea></label>
-        <button class="btn btn-warning mt-2" onclick="confirmAction('remove', '${track.title}', '${track.artist}', '${track.album}')">Remove</button>
-        <button class="btn btn-danger mt-2" onclick="confirmAction('delete', '${track.title}', '${track.artist}', '${track.album}')">Delete</button>
-        <button class="btn btn-success mt-2" onclick="saveTrack('${track.title}', '${track.artist}', '${track.album}')">Save</button>
-        
-        <button class="btn btn-secondary mt-2" onclick="closeEditForm()">Cancel</button>
-    `;
     const editFormContainer = document.getElementById('editFormContainer');
-    editFormContainer.innerHTML = formHtml; 
+    editFormContainer.innerHTML = '';
+
+    const heading = document.createElement('h5');
+    heading.textContent = 'Edit Track';
+    editFormContainer.appendChild(heading);
+
+    // Build each field with DOM APIs; assigning to .value never parses HTML,
+    // so metadata containing < > " ' is treated as literal text.
+    const textFields = [
+        { id: 'editTitle', label: 'Title', value: track.title },
+        { id: 'editArtist', label: 'Artist', value: track.artist },
+        { id: 'editAlbum', label: 'Album', value: track.album },
+        { id: 'editYear', label: 'Year', value: track.year },
+        { id: 'editGenre', label: 'Genre', value: track.genre },
+        { id: 'editComposer', label: 'Composer', value: track.composer },
+        { id: 'editBpm', label: 'BPM', value: track.bpm },
+    ];
+    textFields.forEach(field => {
+        const label = document.createElement('label');
+        label.textContent = field.label + ': ';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = field.id;
+        input.className = 'form-control';
+        input.value = field.value || '';
+        label.appendChild(input);
+        editFormContainer.appendChild(label);
+    });
+
+    const commentsLabel = document.createElement('label');
+    commentsLabel.textContent = 'Comments: ';
+    const commentsArea = document.createElement('textarea');
+    commentsArea.id = 'editComments';
+    commentsArea.className = 'form-control';
+    commentsArea.value = track.comments || '';
+    commentsLabel.appendChild(commentsArea);
+    editFormContainer.appendChild(commentsLabel);
+
+    // Wire actions via closures over the track object rather than interpolating
+    // its fields into inline onclick strings.
+    const actions = [
+        { text: 'Remove', className: 'btn btn-warning mt-2', handler: () => confirmAction('remove', track.title, track.artist, track.album) },
+        { text: 'Delete', className: 'btn btn-danger mt-2', handler: () => confirmAction('delete', track.title, track.artist, track.album) },
+        { text: 'Save', className: 'btn btn-success mt-2', handler: () => saveTrack(track.title, track.artist, track.album) },
+        { text: 'Cancel', className: 'btn btn-secondary mt-2', handler: () => closeEditForm() },
+    ];
+    actions.forEach(action => {
+        const button = document.createElement('button');
+        button.className = action.className;
+        button.textContent = action.text;
+        button.addEventListener('click', action.handler);
+        editFormContainer.appendChild(button);
+    });
 }
 
 function saveTrack(originalTitle, originalArtist, originalAlbum) {
@@ -390,6 +431,13 @@ function closeEditForm() {
 
 function confirmAction(action, title, artist, album) {
     const actionText = action === 'delete' ? 'delete this track? This action cannot be undone.' : 'remove this track from the library?';
+    // Remove any leftover modal (e.g. dismissed without acting) so the id stays
+    // unique and the handler below targets the fresh one.
+    const stale = document.getElementById('confirmationModal');
+    if (stale) stale.remove();
+
+    // actionText is a fixed string; the track fields are NOT interpolated into
+    // the markup — the Confirm handler is wired via addEventListener below.
     const modalHtml = `
         <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
             <div class="modal-dialog">
@@ -403,13 +451,15 @@ function confirmAction(action, title, artist, album) {
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-danger" onclick="executeAction('${action}', '${title}', '${artist}', '${album}')">Confirm</button>
+                        <button type="button" class="btn btn-danger" id="confirmActionButton">Confirm</button>
                     </div>
                 </div>
             </div>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+    document.getElementById('confirmActionButton')
+        .addEventListener('click', () => executeAction(action, title, artist, album));
     const confirmationModal = new bootstrap.Modal(document.getElementById('confirmationModal'));
     confirmationModal.show();
 }
