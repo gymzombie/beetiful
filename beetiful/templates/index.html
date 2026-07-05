@@ -29,10 +29,21 @@
             </div>
 
             <div id="configEditor" class="mt-4">
-                <h5>Config Editor</h5>
-                <textarea id="configTextArea" rows="10" class="form-control"></textarea>
-                <button class="btn btn-success mt-2" onclick="editConfig()">Save Config</button>
-                <pre id="configResult" class="mt-2"></pre>
+                <h5 class="mb-2">
+                    <!-- Bootstrap collapse toggle; starts collapsed so the editor
+                         stays out of the way until the user opens it. The config
+                         still loads in the background via viewConfig(). -->
+                    <button class="config-toggle collapsed" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#configEditorBody"
+                            aria-expanded="false" aria-controls="configEditorBody">
+                        <span class="config-chevron" aria-hidden="true">▸</span> Config Editor
+                    </button>
+                </h5>
+                <div id="configEditorBody" class="collapse">
+                    <textarea id="configTextArea" rows="10" class="form-control"></textarea>
+                    <button class="btn btn-success mt-2" onclick="editConfig()">Save Config</button>
+                    <pre id="configResult" class="mt-2"></pre>
+                </div>
             </div>
         </div>
 
