@@ -33,6 +33,27 @@ function editButtonFormatter(cell) {
     return button;
 }
 
+// Shorten a filesystem path to its last two folders + filename
+// (e.g. .../Artist/Album/Song.mp3) — the part that matters for most libraries.
+// Splits on either separator so it works for POSIX and Windows paths.
+function shortPath(fullPath) {
+    if (!fullPath) return '';
+    const parts = fullPath.split(/[\\/]+/).filter(Boolean);
+    const tail = parts.slice(-3);  // two folders + filename
+    const short = tail.join('/');
+    return parts.length > tail.length ? '…/' + short : short;
+}
+
+// Path cell: show the shortened path as text, full path on hover (title
+// attribute is inert — never parsed as HTML), preserving the XSS guarantee.
+function pathCellFormatter(cell) {
+    const fullPath = cell.getValue() ?? '';
+    const span = document.createElement('span');
+    span.textContent = shortPath(fullPath);
+    span.title = fullPath;
+    return span;
+}
+
 function initLibraryTable() {
     libraryTable = new Tabulator('#libraryTable', {
         height: '75vh',
@@ -48,6 +69,7 @@ function initLibraryTable() {
             { title: 'Artist', field: 'artist', headerFilter: 'input', formatter: textCellFormatter },
             { title: 'Album', field: 'album', headerFilter: 'input', formatter: textCellFormatter },
             { title: 'Genre', field: 'genre', headerFilter: 'input', formatter: textCellFormatter },
+            { title: 'Path', field: 'path', headerFilter: 'input', formatter: pathCellFormatter },
             { title: '', headerSort: false, width: 90, formatter: editButtonFormatter },
         ],
     });
@@ -170,6 +192,19 @@ function editTrack(track) {
     commentsArea.value = track.comments || '';
     commentsLabel.appendChild(commentsArea);
     editFormContainer.appendChild(commentsLabel);
+
+    // Read-only full filesystem path: beets manages file location via `move`,
+    // so this is for reference/copying only and is never sent back on save.
+    const pathLabel = document.createElement('label');
+    pathLabel.textContent = 'Path: ';
+    const pathInput = document.createElement('input');
+    pathInput.type = 'text';
+    pathInput.id = 'editPath';
+    pathInput.className = 'form-control';
+    pathInput.readOnly = true;
+    pathInput.value = track.path || '';  // assigning .value never parses HTML
+    pathLabel.appendChild(pathInput);
+    editFormContainer.appendChild(pathLabel);
 
     // Wire actions via closures over the track object (which carries the stable
     // id) rather than interpolating its fields into inline onclick strings.

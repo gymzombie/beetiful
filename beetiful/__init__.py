@@ -229,8 +229,11 @@ def run_beet(args, **kwargs):
 # target an exact track (id:<n>) instead of an ambiguous title/artist/album
 # match. Both the `beet list` format string and the parser derive from this one
 # list, so they can never drift out of sync.
+# `path` is the track's filesystem location ($path). It is read-only here (beets
+# manages file location via `move`, not `modify`) and appended last so existing
+# field positions are unchanged.
 LIBRARY_FIELDS = ('id', 'title', 'artist', 'album', 'genre',
-                  'year', 'bpm', 'composer', 'comments')
+                  'year', 'bpm', 'composer', 'comments', 'path')
 
 # Field delimiter for `beet list -f`. ASCII Unit Separator (0x1f) never appears
 # in tag text, so splitting on it is robust where the old '@@' could collide

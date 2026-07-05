@@ -51,6 +51,14 @@ def test_parse_preserves_values_containing_old_delimiter():
     assert item['artist'] == 'Artist'
 
 
+def test_parse_includes_path():
+    """The filesystem path ($path) is surfaced as the `path` field (issue #16)."""
+    assert 'path' in LIBRARY_FIELDS
+    values = ['3', 'T', 'A', 'Alb', 'Rock', '2020', '120', 'C', '', '/music/A/Alb/T.mp3']
+    item = beetiful.parse_library_item(LIST_SEP.join(values))
+    assert item['path'] == '/music/A/Alb/T.mp3'
+
+
 def test_parse_short_line_defaults_missing_fields():
     item = beetiful.parse_library_item(LIST_SEP.join(['9', 'OnlyTitle']))
     assert item['id'] == '9' and item['title'] == 'OnlyTitle'
