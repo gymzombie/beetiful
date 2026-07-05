@@ -52,15 +52,25 @@
     <!-- Shown when no beets library exists; hides the table/toolbar below. -->
     <div id="libraryNotice" class="alert alert-warning mt-3" style="display: none;"></div>
 
-    <!-- Stats summary (populated by getStats) + Clear Filters. Filtering,
-         sorting and pagination are handled by the Tabulator grid itself. -->
+    <!-- Stats summary (populated by getStats) + column picker + Clear Filters.
+         Filtering, sorting and pagination are handled by the Tabulator grid. -->
     <div id="libraryToolbar" class="d-flex justify-content-between align-items-center my-2">
         <div id="libraryStats" class="stat-summary">
             <span>Tracks <span id="totalTracks" class="stat-count"></span></span>
             <span>Artists <span id="totalArtists" class="stat-count"></span></span>
             <span>Albums <span id="totalAlbums" class="stat-count"></span></span>
         </div>
-        <button class="btn btn-outline-danger btn-sm" id="clearFilters" onclick="clearFilters()">Clear Filters</button>
+        <div class="d-flex gap-2">
+            <!-- Column visibility picker (issue #20); items built in library.js.
+                 auto-close="outside" keeps it open while toggling several. -->
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                        id="columnsMenuButton" data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside" aria-expanded="false">Columns</button>
+                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" id="columnsMenu"></ul>
+            </div>
+            <button class="btn btn-outline-danger btn-sm" id="clearFilters" onclick="clearFilters()">Clear Filters</button>
+        </div>
     </div>
 
     <div class="table-container">
