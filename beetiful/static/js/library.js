@@ -11,8 +11,12 @@ let libraryTable = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     initLibraryTable();
-    // replaceData must run after the table is built, so load on 'tableBuilt'.
-    libraryTable.on('tableBuilt', fetchLibrary);
+    // Build the columns menu (reads restored visibility) and load data once the
+    // table is built — replaceData/getColumns require a built table.
+    libraryTable.on('tableBuilt', () => {
+        buildColumnsMenu();
+        fetchLibrary();
+    });
 });
 
 // Render a cell value as plain text — never HTML. Returning a DOM node (rather
@@ -64,16 +68,58 @@ function initLibraryTable() {
         paginationCounter: 'rows',
         index: 'id',
         placeholder: 'No matching tracks',
+        // Persist which columns the user has shown/hidden to localStorage, so a
+        // customized view (issue #20) survives reloads. Keyed by column field.
+        persistence: { columns: ['visible'] },
+        persistenceID: 'beetiful-library',
+        // Every fetched field is available as a column; the ones off by default
+        // (visible:false) can be turned on from the Columns menu. Title/Artist/
+        // Album/Genre/Path stay visible to preserve the previous default view.
         columns: [
             { title: 'Title', field: 'title', headerFilter: 'input', formatter: textCellFormatter },
             { title: 'Artist', field: 'artist', headerFilter: 'input', formatter: textCellFormatter },
             { title: 'Album', field: 'album', headerFilter: 'input', formatter: textCellFormatter },
             { title: 'Genre', field: 'genre', headerFilter: 'input', formatter: textCellFormatter },
+            { title: 'Year', field: 'year', headerFilter: 'input', formatter: textCellFormatter, visible: false },
+            { title: 'BPM', field: 'bpm', headerFilter: 'input', formatter: textCellFormatter, visible: false },
+            { title: 'Composer', field: 'composer', headerFilter: 'input', formatter: textCellFormatter, visible: false },
+            { title: 'Comments', field: 'comments', headerFilter: 'input', formatter: textCellFormatter, visible: false },
             { title: 'Path', field: 'path', headerFilter: 'input', formatter: pathCellFormatter },
-            { title: '', headerSort: false, width: 90, formatter: editButtonFormatter },
+            // Actions column: has a field so column persistence has a stable key,
+            // but it is excluded from the Columns menu and always shown.
+            { title: '', field: 'actions', headerSort: false, width: 90, formatter: editButtonFormatter },
         ],
     });
     return libraryTable;
+}
+
+// Populate the "Columns" dropdown with a checkbox per data column, reflecting
+// the current (persisted) visibility. Toggling shows/hides the column and
+// Tabulator persists the choice. Built from the table's own columns so it
+// always matches; labels are our static titles, never track data.
+function buildColumnsMenu() {
+    const menu = document.getElementById('columnsMenu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    libraryTable.getColumns().forEach(col => {
+        const def = col.getDefinition();
+        if (!def.field || def.field === 'actions') return;  // skip the actions column
+        const item = document.createElement('li');
+        const label = document.createElement('label');
+        label.className = 'dropdown-item d-flex align-items-center gap-2 mb-0';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input mt-0';
+        checkbox.checked = col.isVisible();
+        checkbox.addEventListener('change', () => {
+            checkbox.checked ? col.show() : col.hide();
+        });
+        const text = document.createElement('span');
+        text.textContent = def.title || def.field;
+        label.append(checkbox, text);
+        item.appendChild(label);
+        menu.appendChild(item);
+    });
 }
 
 function fetchLibrary() {
