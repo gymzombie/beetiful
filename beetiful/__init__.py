@@ -224,6 +224,44 @@ def run_beet(args, **kwargs):
     return subprocess.run(args, **kwargs)
 
 
+# Ordered library fields fetched from beets. `id` is first and is beets' stable
+# track identifier: it is carried through to the frontend so edits and removals
+# target an exact track (id:<n>) instead of an ambiguous title/artist/album
+# match. Both the `beet list` format string and the parser derive from this one
+# list, so they can never drift out of sync.
+LIBRARY_FIELDS = ('id', 'title', 'artist', 'album', 'genre',
+                  'year', 'bpm', 'composer', 'comments')
+
+# Field delimiter for `beet list -f`. ASCII Unit Separator (0x1f) never appears
+# in tag text, so splitting on it is robust where the old '@@' could collide
+# with a value (e.g. a title containing '@@'). Residual known limitation,
+# unchanged from before: a literal newline inside a field would still break the
+# per-line record splitting.
+LIST_SEP = '\x1f'
+LIBRARY_FORMAT = LIST_SEP.join(f'${field}' for field in LIBRARY_FIELDS)
+
+
+def track_selector(data):
+    """Return beets query args identifying a single track, or None.
+
+    Prefers the stable `id` when the client supplies it; otherwise falls back to
+    the title/artist/album triple (accepting the `original*` keys the edit form
+    sends) for backward compatibility. Returns None when neither is usable — the
+    caller must reject that rather than run an empty beets query, which would
+    match (and modify/remove) the entire library.
+    """
+    track_id = data.get('id')
+    if track_id not in (None, ''):
+        return [f'id:{track_id}']
+
+    title = data.get('title') or data.get('originalTitle')
+    artist = data.get('artist') or data.get('originalArtist')
+    album = data.get('album') or data.get('originalAlbum')
+    if not (title and artist and album):
+        return None
+    return [f'title:{title}', f'artist:{artist}', f'album:{album}']
+
+
 @app.route('/api/stats', methods=['GET'])
 @requires_library
 def get_stats():
@@ -258,8 +296,8 @@ def run_command():
 @app.route('/api/library', methods=['GET'])
 @requires_library
 def get_library():
-    """Fetch the library items including genre information."""
-    result = run_beet(['beet', 'list', '-f', '$title@@$artist@@$album@@$genre@@$year@@$bpm@@$composer@@$comments'])
+    """Fetch the library items, including a stable id for each track."""
+    result = run_beet(['beet', 'list', '-f', LIBRARY_FORMAT])
     if result.returncode == 0:
         items = [parse_library_item(line) for line in result.stdout.splitlines()]
         return jsonify({'items': items})
@@ -267,17 +305,15 @@ def get_library():
         return jsonify({'error': result.stderr}), 500
 
 def parse_library_item(line):
-    """Parse a library item from the list output."""
-    fields = line.split('@@')  
+    """Parse one `beet list` line into a dict keyed by LIBRARY_FIELDS.
+
+    Splitting on LIST_SEP (not '@@') keeps values that contain '@@' intact.
+    Missing trailing fields default to '' so a short line never raises.
+    """
+    values = line.split(LIST_SEP)
     return {
-        'title': fields[0] if len(fields) > 0 else '',
-        'artist': fields[1] if len(fields) > 1 else '',
-        'album': fields[2] if len(fields) > 2 else '',
-        'genre': fields[3] if len(fields) > 3 else '',
-        'year': fields[4] if len(fields) > 4 else '',
-        'bpm': fields[5] if len(fields) > 5 else '',
-        'composer': fields[6] if len(fields) > 6 else '',
-        'comments': fields[7] if len(fields) > 7 else ''
+        field: (values[i] if i < len(values) else '')
+        for i, field in enumerate(LIBRARY_FIELDS)
     }
 
 
@@ -286,31 +322,16 @@ def parse_library_item(line):
 @requires_library
 def remove_track():
     data = request.json
-    title = data.get('title')
-    artist = data.get('artist')
-    album = data.get('album')
+    selector = track_selector(data)
+    if selector is None:
+        return jsonify({'error': 'Missing track identifier (id or title/artist/album).'}), 400
 
-    
-    id_command = ['beet', 'list', '-f', '$id', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    id_result = run_beet(id_command)
-
-    if id_result.returncode != 0 or not id_result.stdout.strip():
-        print(f"Error finding track ID: {id_result.stderr}")
-        return jsonify({'error': 'Track not found for removal.'}), 500
-
-    track_id = id_result.stdout.strip()
-    print(f"Found track ID: {track_id}")
-
-    
-    remove_command = ['beet', 'remove', '-f', f'id:{track_id}']
-    print(f"Executing remove command: {' '.join(remove_command)}")
-
+    remove_command = ['beet', 'remove', '-f'] + selector
     try:
-        result = run_beet(remove_command, check=True)
-        print("Track removed from library.")
+        run_beet(remove_command, check=True)
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
-        print(f"Error removing track: {e.stderr}")
+        logger.error('Error removing track: %s', e.stderr)
         return jsonify({'error': e.stderr}), 500
 
 
@@ -318,56 +339,37 @@ def remove_track():
 @requires_library
 def delete_track():
     data = request.json
-    print(f"Delete request received with data: {data}")  
-    title = data.get('title')
-    artist = data.get('artist')
-    album = data.get('album')
+    selector = track_selector(data)
+    if selector is None:
+        return jsonify({'error': 'Missing track identifier (id or title/artist/album).'}), 400
 
-    if not title or not artist or not album:
-        print("Error: Missing required fields for delete command.")  
-        return jsonify({'error': 'Missing required fields'}), 400
-
-    
-    command = ['beet', 'remove', '-f', f'title:{title}', f'artist:{artist}', f'album:{album}']
-    print(f"Executing delete command: {' '.join(command)}")
-
+    command = ['beet', 'remove', '-f'] + selector
     try:
-        result = run_beet(command, check=True)
-        print("Track deleted successfully.")  
+        run_beet(command, check=True)
         return jsonify({'message': 'Track removed from library.'})
     except subprocess.CalledProcessError as e:
-        print(f"Error deleting track: {e.stderr}")  
+        logger.error('Error deleting track: %s', e.stderr)
         return jsonify({'error': e.stderr}), 500
-
-
 
 
 @app.route('/api/library/update', methods=['POST'])
 @requires_library
 def update_track():
     data = request.json
-    original_title = data.get('originalTitle', '')
-    original_artist = data.get('originalArtist', '')
-    original_album = data.get('originalAlbum', '')
     updated_track = data.get('updatedTrack', {})
 
-    
-    command = ['beet', 'modify', '-y', f'title:{original_title}', f'artist:{original_artist}', f'album:{original_album}']
+    selector = track_selector(data)
+    if selector is None:
+        return jsonify({'error': 'Missing track identifier (id or title/artist/album).'}), 400
 
-    
+    command = ['beet', 'modify', '-y'] + selector
     for field, value in updated_track.items():
-        if value:  
+        if value:
             command.append(f'{field}={value}')
 
-    
-    print(f"Executing command: {' '.join(command)}")
-
-    
     result = run_beet(command)
-
-
     if result.returncode != 0:
-        print(f"Error: {result.stderr}")
+        logger.error('Error updating track: %s', result.stderr)
         return jsonify({'error': result.stderr}), 500
 
     return jsonify({'message': 'Track updated successfully.'})
