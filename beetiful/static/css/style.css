@@ -54,54 +54,47 @@ button:hover, input:focus, select:focus, textarea:focus {
     border-color: #666;
 }
 
-.tighten-table th, .tighten-table td {
-    padding: 0.5rem;
+/* Stats summary line above the grid (relocated from the old table headers). */
+.stat-summary {
+    display: flex;
+    gap: 1rem;
     font-size: 0.9rem;
-    max-width: 150px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    color: #ffffff;
+    color: #cfcfcf;
 }
 
-.tighten-table th {
+.stat-count {
+    color: var(--beet-color);
+    font-weight: bold;
+}
+
+/* Tabulator (midnight theme) tuned to the beet palette. */
+#libraryTable {
+    font-size: 0.9rem;
+}
+
+#libraryTable .tabulator-header,
+#libraryTable .tabulator-col {
     background-color: var(--highlight-color);
     color: #ffffff;
 }
 
-.tighten-table td {
-    background-color: var(--table-bg); 
+#libraryTable .tabulator-row {
+    background-color: var(--table-bg);
     color: #ffffff;
 }
 
-.table-striped tbody tr:hover {
+#libraryTable .tabulator-row.tabulator-row-even {
+    background-color: #3d3d3d;
+}
+
+#libraryTable .tabulator-row:hover {
     background-color: #444;
 }
 
-#paginationControls {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 5px;
-}
-
-#paginationControls button {
-    margin: 0 3px;
-    padding: 3px 8px;
-    font-size: 0.9rem;
-}
-
-#clearFilters {
-    margin: 10px;
-    padding: 5px 10px;
-    background-color: var(--primary-btn);
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-#clearFilters:hover {
-    background-color: #0056b3; 
+#libraryTable .tabulator-header-filter input {
+    background-color: var(--input-bg);
+    color: #ffffff;
+    border: 1px solid var(--border-color);
 }
 
 #logo-container {
@@ -130,24 +123,8 @@ button:hover, input:focus, select:focus, textarea:focus {
     opacity: 1;
 }
 
-th input[type="text"] {
-    width: 100%;
-    display: block;
-    margin-top: 5px;
-}
-
 input[type="text"]:not(:placeholder-shown) {
     border: 2px solid var(--highlight-color);
-}
-
-.active-page {
-    background-color: var(--primary-btn);
-    color: white;
-    border: none;
-    outline: none;
-    cursor: default;
-    pointer-events: none;
-    font-weight: bold;
 }
 
 @media (max-width: 768px) {
@@ -212,35 +189,5 @@ input[type="text"]:not(:placeholder-shown) {
 
 #commandBuilder input::placeholder {
     color: #777777;
-}
-
-th {
-    cursor: pointer; 
-    position: relative; 
-    padding-right: 20px; 
-}
-
-
-th.sortable::after {
-    content: ''; 
-}
-
-
-.sort-arrow {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.8em;
-    color: #cfcfcf; 
-}
-
-
-th.asc .sort-arrow {
-    content: '▲'; 
-}
-
-th.desc .sort-arrow {
-    content: '▼'; 
 }
 
