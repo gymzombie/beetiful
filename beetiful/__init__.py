@@ -117,11 +117,13 @@ def check_config_file():
     not an exit. This surfaces the problem in the logs immediately rather than
     only when the webapp first requests /api/config.
     """
-    if not os.path.isfile(config_path):
+    config_path = resolve_config_path(must_exist=True)
+    if config_path is None:
+        expected = os.path.join(beets_config_dir, CONFIG_FILENAMES[0])
         logger.warning(
-            'Beets config file not found at %s (BEETSDIR=%s); config editing '
-            'and beets commands may fail until it exists',
-            config_path, beets_config_dir,
+            'Beets config file not found in %s (BEETSDIR=%s); config editing '
+            'and beets commands may fail until %s exists',
+            beets_config_dir, beets_config_dir, expected,
         )
     elif not os.access(config_path, os.R_OK):
         logger.warning(
