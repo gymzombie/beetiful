@@ -44,6 +44,14 @@ Then run it:
 `docker compose up`
 
 
+### Updating with Docker Compose
+```
+docker compose down 
+git pull 
+docker compose build 
+docker compose up
+```
+
 ## Installation
 
 To install Beetiful, follow these steps:
